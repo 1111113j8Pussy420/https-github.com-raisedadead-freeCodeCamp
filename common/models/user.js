@@ -212,7 +212,7 @@ module.exports = function(User) {
         req.flash('error', {
           msg: 'Oops, something went wrong, please try again later'
         });
-        return res.redirect('/email-signup');
+        return res.redirect('/email-signin');
       });
   });
 

@@ -165,14 +165,13 @@ module.exports = function(app) {
   router.get('/logout', function(req, res) {
     res.redirect(301, '/signout');
   });
-  router.get('/signup', getEmailSignup);
+  router.get('/signup', getSignin);
   router.get('/signin', getSignin);
   router.get('/signout', signout);
   router.get('/forgot', getForgot);
   api.post('/forgot', postForgot);
   router.get('/reset-password', getReset);
   api.post('/reset-password', postReset);
-  router.get('/email-signup', getEmailSignup);
   router.get('/email-signin', getEmailSignin);
   router.get('/deprecated-signin', getDepSignin);
   router.get('/update-email', getUpdateEmail);
@@ -435,15 +434,6 @@ module.exports = function(app) {
     }
     return res.render('account/email-signin', {
       title: 'Sign in to freeCodeCamp using your Email Address'
-    });
-  }
-
-  function getEmailSignup(req, res) {
-    if (req.user) {
-      return res.redirect('/');
-    }
-    return res.render('account/email-signup', {
-      title: 'Sign up for freeCodeCamp using your Email Address'
     });
   }
 
