@@ -170,7 +170,6 @@ module.exports = function(app) {
   router.get('/signout', signout);
   router.get('/email-signin', getEmailSignin);
   router.get('/deprecated-signin', getDepSignin);
-  router.get('/update-email', getUpdateEmail);
   router.get('/passwordless-auth', invalidateAuthToken, getPasswordlessAuth);
   api.post('/passwordless-auth', postPasswordlessAuth);
   router.get(
@@ -412,15 +411,6 @@ module.exports = function(app) {
     }
     return res.render('account/deprecated-signin', {
       title: 'Sign in to freeCodeCamp using a Deprecated Login'
-    });
-  }
-
-  function getUpdateEmail(req, res) {
-    if (!req.user) {
-      return res.redirect('/');
-    }
-    return res.render('account/update-email', {
-      title: 'Update your Email'
     });
   }
 
