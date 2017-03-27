@@ -1,5 +1,7 @@
 import React, { PropTypes } from 'react';
-import { Button, HelpBlock, FormControl, FormGroup } from 'react-bootstrap';
+import {
+  Button, Row, HelpBlock, FormControl, FormGroup
+} from 'react-bootstrap';
 import { LinkContainer } from 'react-router-bootstrap';
 import { reduxForm } from 'redux-form';
 import { isEmail } from 'validator';
@@ -66,7 +68,10 @@ export class UpdateEmail extends React.Component {
       'Verify Email';
     return (
       <div>
-        <h2 className='text-center'>Update your email address here:</h2>
+        <Row>
+          <h2 className='text-center'>Update your email address here:</h2>
+        </Row>
+        <div className='button-spacer' />
         <form
           name='update-email'
           onSubmit={ this.handleSubmit }

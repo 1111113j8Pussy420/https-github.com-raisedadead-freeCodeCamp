@@ -19,6 +19,9 @@
     "emailVerifyTTL": {
       "type": "date"
     },
+    "emailAuthLinkTTL": {
+      "type": "date"
+    },
     "password": {
       "type": "string"
     },
@@ -283,6 +286,13 @@
       "principalId": "$owner",
       "permission": "ALLOW",
       "property": "updateLanguage"
+    },
+    {
+      "accessType": "EXECUTE",
+      "principalType": "ROLE",
+      "principalId": "$everyone",
+      "permission": "ALLOW",
+      "property": "requestAuthLink"
     }
   ],
   "methods": {}

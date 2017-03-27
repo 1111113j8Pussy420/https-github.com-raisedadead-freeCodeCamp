@@ -1,10 +1,10 @@
 import { Observable } from 'rx';
 import debugFactory from 'debug';
-import { isEmail } from 'validator';
-import path from 'path';
+// import { isEmail } from 'validator';
+// import path from 'path';
 
 const debug = debugFactory('fcc:user:remote');
-const isDev = process.env.NODE_ENV !== 'production';
+// const isDev = process.env.NODE_ENV !== 'production';
 
 function destroyAllRelated(id, Model) {
   return Observable.fromNodeCallback(
@@ -47,6 +47,9 @@ module.exports = function(app) {
         }
       );
   });
+
+  /*
+  Todo : This may be removed post revivew.
 
   // set email varified false on user email signup
   // should not be set with oauth signin methods
@@ -101,4 +104,5 @@ module.exports = function(app) {
       return res.redirect(redirect);
     });
   });
+  */
 };

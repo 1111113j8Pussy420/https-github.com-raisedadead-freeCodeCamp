@@ -140,6 +140,7 @@ module.exports = function(app) {
   const router = app.loopback.Router();
   const api = app.loopback.Router();
   const User = app.models.User;
+  const AccessToken = app.models.AccessToken;
   const Block = app.models.Block;
   const { Email } = app.models;
   const map$ = cachedMap(Block);
@@ -154,23 +155,23 @@ module.exports = function(app) {
     );
   }
 
+  AccessToken.findOne$ = Observable.fromNodeCallback(
+    AccessToken.findOne, AccessToken
+  );
+
   router.get('/login', function(req, res) {
     res.redirect(301, '/signin');
   });
   router.get('/logout', function(req, res) {
     res.redirect(301, '/signout');
   });
-  router.get('/signup', getEmailSignup);
+  router.get('/signup', getSignin);
   router.get('/signin', getSignin);
   router.get('/signout', signout);
-  router.get('/forgot', getForgot);
-  api.post('/forgot', postForgot);
-  router.get('/reset-password', getReset);
-  api.post('/reset-password', postReset);
-  router.get('/email-signup', getEmailSignup);
   router.get('/email-signin', getEmailSignin);
   router.get('/deprecated-signin', getDepSignin);
-  router.get('/update-email', getUpdateEmail);
+  router.get('/passwordless-auth', invalidateAuthToken, getPasswordlessAuth);
+  api.post('/passwordless-auth', postPasswordlessAuth);
   router.get(
     '/delete-my-account',
     sendNonUserToMap,
@@ -250,6 +251,154 @@ module.exports = function(app) {
     });
   }
 
+  const defaultErrorMsg = [ 'Oops, something is not right, please request a ',
+  'fresh link to sign in / sign up.' ].join('');
+
+  function postPasswordlessAuth(req, res) {
+    if (req.user || !(req.body && req.body.email)) {
+      return res.redirect('/');
+    }
+
+    return User.requestAuthLink(req.body.email)
+      .then(msg => {
+          return res.status(200).send({ message: msg });
+      })
+      .catch(err => {
+        debug(err);
+        return res.status(200).send({ message: defaultErrorMsg });
+      });
+  }
+
+  function invalidateAuthToken(req, res, next) {
+    if (req.user) {
+      res.redirect('/');
+    }
+
+    if (!req.query || !req.query.email || !req.query.token) {
+      req.flash('info', { msg: defaultErrorMsg });
+      return res.redirect('/email-signin');
+    }
+
+    const authTokenId = req.query.token;
+    const authEmailId = req.query.email;
+
+    return AccessToken.findOne$({ where: {id: authTokenId} })
+     .map(authToken => {
+       if (!authToken) {
+         req.flash('info', { msg: defaultErrorMsg });
+         return res.redirect('/email-signin');
+       }
+
+       const userId = authToken.userId;
+       return User.findById(userId, (err, user) => {
+         if (err) {
+           debug(err);
+           req.flash('info', { msg: defaultErrorMsg });
+           return res.redirect('/email-signin');
+         }
+         if (user.email !== authEmailId) {
+           req.flash('info', { msg: defaultErrorMsg });
+           return res.redirect('/email-signin');
+         }
+         return authToken.validate((err, isValid) => {
+           if (err) { throw err; }
+           if (!isValid) {
+             req.flash('info', { msg: [ 'Looks like the link you clicked has',
+              'expired, please request a fresh link, to sign in.'].join('')
+              });
+             return res.redirect('/email-signin');
+           }
+           return authToken.destroy((err) => {
+             if (err) { debug(err); }
+             next();
+           });
+         });
+       });
+     })
+     .subscribe(
+       () => {},
+       next
+     );
+  }
+
+  function getPasswordlessAuth(req, res, next) {
+    if (req.user) {
+      req.flash('info', {
+            msg: 'Hey, looks like you’re already signed in.'
+          });
+      return res.redirect('/');
+    }
+
+    if (!req.query || !req.query.email || !req.query.token) {
+      req.flash('info', { msg: defaultErrorMsg });
+      return res.redirect('/email-signin');
+    }
+
+    const email = req.query.email;
+
+    return User.findOne$({ where: { email }})
+      .map(user => {
+
+        if (!user) {
+          debug(`did not find a valid user with email: ${email}`);
+          req.flash('info', { msg: defaultErrorMsg });
+          return res.redirect('/email-signin');
+        }
+
+        const emailVerified = true;
+        const emailAuthLinkTTL = null;
+        const emailVerifyTTL = null;
+        user.update$({
+          emailVerified, emailAuthLinkTTL, emailVerifyTTL
+        })
+        .do((user) => {
+          user.emailVerified = emailVerified;
+          user.emailAuthLinkTTL = emailAuthLinkTTL;
+          user.emailVerifyTTL = emailVerifyTTL;
+        });
+
+        return user.createAccessToken(
+          { ttl: User.settings.ttl }, (err, accessToken) => {
+          if (err) { throw err; }
+
+          var config = {
+            signed: !!req.signedCookies,
+            maxAge: accessToken.ttl
+          };
+
+          if (accessToken && accessToken.id) {
+            debug('setting cookies');
+            res.cookie('access_token', accessToken.id, config);
+            res.cookie('userId', accessToken.userId, config);
+          }
+
+          return req.logIn({
+            id: accessToken.userId.toString() }, err => {
+            if (err) { return next(err); }
+
+            debug('user logged in');
+
+            if (req.session && req.session.returnTo) {
+              var redirectTo = req.session.returnTo;
+              if (redirectTo === '/map-aside') {
+                redirectTo = '/map';
+              }
+              return res.redirect(redirectTo);
+            }
+
+            req.flash('success', { msg:
+              'Success! You have signed in to your account. Happy Coding!'
+            });
+            return res.redirect('/');
+          });
+        });
+    })
+    .subscribe(
+      () => {},
+      next
+    );
+  }
+
   function signout(req, res) {
     req.logout();
     res.redirect('/');
@@ -265,30 +414,12 @@ module.exports = function(app) {
     });
   }
 
-  function getUpdateEmail(req, res) {
-    if (!req.user) {
-      return res.redirect('/');
-    }
-    return res.render('account/update-email', {
-      title: 'Update your Email'
-    });
-  }
-
   function getEmailSignin(req, res) {
     if (req.user) {
       return res.redirect('/');
     }
     return res.render('account/email-signin', {
       title: 'Sign in to freeCodeCamp using your Email Address'
-    });
-  }
-
-  function getEmailSignup(req, res) {
-    if (req.user) {
-      return res.redirect('/');
-    }
-    return res.render('account/email-signup', {
-      title: 'Sign up for freeCodeCamp using your Email Address'
     });
   }
 
@@ -578,74 +709,6 @@ module.exports = function(app) {
     });
   }
 
-  function getReset(req, res) {
-    if (!req.accessToken) {
-      req.flash('errors', { msg: 'access token invalid' });
-      return res.render('account/forgot');
-    }
-    return res.render('account/reset', {
-      title: 'Reset your Password',
-      accessToken: req.accessToken.id
-    });
-  }
-
-  function postReset(req, res, next) {
-    const errors = req.validationErrors();
-    const { password } = req.body;
-
-    if (errors) {
-      req.flash('errors', errors);
-      return res.redirect('back');
-    }
-
-    return User.findById(req.accessToken.userId, function(err, user) {
-      if (err) { return next(err); }
-      return user.updateAttribute('password', password, function(err) {
-        if (err) { return next(err); }
-
-        debug('password reset processed successfully');
-        req.flash('info', { msg: 'You\'ve successfully reset your password.' });
-        return res.redirect('/');
-      });
-    });
-  }
-
-  function getForgot(req, res) {
-    if (req.isAuthenticated()) {
-      return res.redirect('/');
-    }
-    return res.render('account/forgot', {
-      title: 'Forgot Password'
-    });
-  }
-
-  function postForgot(req, res) {
-    req.validate('email', 'Email format is not valid').isEmail();
-    const errors = req.validationErrors();
-    const email = req.body.email.toLowerCase();
-
-    if (errors) {
-      req.flash('errors', errors);
-      return res.redirect('/forgot');
-    }
-
-    return User.resetPassword({
-      email: email
-    }, function(err) {
-      if (err) {
-        req.flash('errors', err.message);
-        return res.redirect('/forgot');
-      }
-
-      req.flash('info', {
-        msg: 'An e-mail has been sent to ' +
-        email +
-        ' with further instructions.'
-      });
-      return res.render('account/forgot');
-    });
-  }
-
   function getReportUserProfile(req, res) {
     const username = req.params.username.toLowerCase();
     return res.render('account/report-profile', {
@@ -696,4 +759,5 @@ module.exports = function(app) {
       return res.redirect('/');
     });
   }
+
 };

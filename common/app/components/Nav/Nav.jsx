@@ -152,10 +152,10 @@ export default class FCCNav extends React.Component {
     } else {
       return (
         <NavItem
-          href='/signup'
-          key='signup'
+          href='/signin'
+          key='signin'
           >
-          Sign Up
+          Sign in
         </NavItem>
       );
     }
